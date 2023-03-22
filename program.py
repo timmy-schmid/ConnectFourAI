@@ -2,6 +2,10 @@
 class Board:
     '''
     Bitboard Representation of state.
+    I chose to represent with bitboard to minimise computation of states as we
+    generate so many (will help for tournament).
+    Bitshifting is done at a hardware level and is super fast
+
     Board is represented as a bitstring with 0'th position being LSB
 
     |6 13 20 27 34 41 48| <- Auxilary Row
@@ -121,6 +125,7 @@ def num_in_row(count, pos):
 
     return total
 
+#Useful for debugging states.
 def print_board(board):
     print("Move " + str(board.moves_made))
     print('+===============+')
@@ -137,7 +142,6 @@ def print_board(board):
                 print('. ', end='')
 
         print('|')
-
     print('+===============+')
 
 def connect_four_mm(contents, turn, max_depth):
