@@ -39,32 +39,38 @@ Bitboard Representation of state
 '''
 
 HEIGHT = 6
+AUX_HEIGHT = HEIGHT + 1
 WIDTH = 7
 
 class Board:
     def __init__(self):
-        self.col_pos = [0]*WIDTH
+        self.col_height = [0]*WIDTH
+
         self.cur_player_state = b''
+        self.cur_player_colour = ''
+
+        self.other_player_state = b''
+        self.other_player_colour = ''
+
         self.board_state = b''
         self.moves_made = 0
-
 
 def convert_state_to_player_pos(turn, contents):
 
     board = Board()
     
     cur_player_state, board_state = '', ''
-    
 
     rows = contents.split(',')
+    for i in range (WIDTH-1,-1,-1):
 
-    for i in range (0,WIDTH):
-        col_pos_found = False
-        for j in range(0,HEIGHT):
+        #add auxilary row for bitwise manipulation
+        cur_player_state += '0'
+        board_state += '0'
+
+        for j in range(HEIGHT-1,-1,-1):
             if rows[j][i] == '.':
-                if not col_pos_found: 
-                    board.col_pos[i] = j
-                    col_pos_found = True
+                board.col_height[i] = i*(AUX_HEIGHT)+j
                 cur_player_state += '0'
                 board_state += '0'
             elif rows[j][i] == turn:
@@ -74,14 +80,18 @@ def convert_state_to_player_pos(turn, contents):
             else:
                 cur_player_state += '0'
                 board_state += '1'
-            
-        #add auxilary row for bitwise manipulation
-        cur_player_state += '0'
-        board_state += '0'
 
     board.cur_player_state = int(cur_player_state,2)
     board.board_state = int(board_state,2)
+    board.other_player_state = board.cur_player_state ^ board.board_state
+
     board.moves_made = board.board_state.bit_count()
+    board.cur_player_colour = turn
+
+    if turn == 'r':
+        board.other_player_colour = 'y'
+    else:
+        board.other_player_colour = 'r'     
 
     return board
 
@@ -90,12 +100,20 @@ RIGHT_DIAG = 6
 LEFT_DIAG = 8
 HORIZONTAL = 7
 
+def make_move(board, col):
+    board.cur_player_state = board.cur_player_state ^ board.board_state
+    board.board_state = board.board_state | 1 << board.col_height[col]
+    board.other_player_state = board.cur_player_state ^ board.board_state
+    board.moves_made+=1
+
+    #swap colours
+    temp_colour = board.cur_player_colour
+    board.cur_player_colour = board.other_player_colour
+    board.other_player_colour = temp_colour
 
 def evaluation(board):
 
-    opponent = board.cur_player_state ^ board.board_state
-
-    return score(board.cur_player_state) - score(opponent)
+    return score(board.cur_player_state) - score(board.other_player_state)
 
 
 def score(pos):
@@ -116,13 +134,39 @@ def num_in_row(count, pos):
 
     return total
 
+def print_board(board):
+    print("Move " + str(board.moves_made))
+    print('+===============+')
+    for i in range(HEIGHT,-1,-1):
+        print('| ', end="")
+        for j in range(0,WIDTH):
+            cur = (i + j*(AUX_HEIGHT))
+
+            if (board.cur_player_state & (1 << cur)):
+                print(board.cur_player_colour + ' ', end='')
+            elif (board.other_player_state & (1 << cur)):
+                print(board.other_player_colour + ' ', end='')
+            else:
+                print('. ', end='')
+
+        print('|')
+
+    print('+===============+')
 
 def connect_four_mm(contents, turn, max_depth):
 
-    board = convert_state_to_player_pos(turn[0],contents)
 
-    print(board.col_pos)
-    print(evaluation(board))
+
+
+    
+
+    board = convert_state_to_player_pos(turn[0],contents)
+    print_board(board)
+
+    #print(board.col_height)
+    make_move(board, 6)
+    print_board(board)
+    #print(evaluation(board))
 
     return ''
 
