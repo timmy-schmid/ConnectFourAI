@@ -152,49 +152,29 @@ def num_in_row(count, state):
 
     return total
 
-def minimax(board, depth, is_maximiser, alpha = MIN_EVAL, beta = MAX_EVAL):
+def minimax(board, depth, is_maximiser, alpha = -1000000, beta = 1000000):
     score = eval(board, depth, is_maximiser)
 
     if score is not None:
-        return score
+        return (score,-1)
     
-    scores = []
-    for col in available_cols(board):
-        make_move(board,col)
-        board.analysed_moves += 1
-        log_board(board,log_enabled, depth)
-        score = minimax(board,depth-1,not is_maximiser, alpha, beta)
-        scores.append(score)
-        undo_move(board)
-        if is_maximiser:
-            alpha = max(alpha, score)
-        else:
-            beta = min(beta, score)
-
-        if beta <= alpha:
-            break
-
-    return (max if is_maximiser else min)(scores)
-
-def find_best_move(board,depth, alpha = -1000000, beta = 1000000):
-    board.analysed_moves = 1
-    log_board(board,log_enabled, depth)
     moves = []
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
         log_board(board,log_enabled, depth)
-        
-        score = minimax(board,depth-1,False, alpha, beta)
-        moves.append((score,col))
+        move = (minimax(board,depth-1,not is_maximiser, alpha, beta)[0],col)
+        moves.append(move)
         undo_move(board)
-        alpha = max(alpha, score)
+        if is_maximiser:
+            alpha = max(alpha, move[0])
+        else:
+            beta = min(beta, move[0])
+
         if beta <= alpha:
             break
 
-        
-    log_msg("Possible move evals: " + str(moves),log_enabled)
-    return max(moves,key=itemgetter(0))
+    return (max if is_maximiser else min)(moves,key=itemgetter(0))
 
 #returns the list of columns that are possible to play in
 def available_cols(board):
@@ -206,7 +186,9 @@ def connect_four_ab(contents, turn, max_depth):
     board = convert_state_to_player_pos(turn[0],contents)
     log_msg("STARTING BOARD",log_enabled)
     log_msg("We are playing as " + turn,log_enabled)
-    best_move = find_best_move(board,max_depth)
+    log_board(board,log_enabled, max_depth)
+    board.analysed_moves = 1
+    best_move = minimax(board,max_depth, True)
 
     log_msg("------\nSummary\n------", log_enabled)
     log_msg("Running minimax at depth: " + str(max_depth),log_enabled)
