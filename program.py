@@ -2,7 +2,7 @@
 
 from operator import itemgetter
 
-log_enabled = True
+log_enabled = False
 
 VERTICAL = 1
 RIGHT_DIAG = 6
@@ -162,10 +162,10 @@ def minimax(board, depth, is_maximiser, alpha = MIN_EVAL, beta = MAX_EVAL):
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
-
+        log_board(board,log_enabled, depth)
         score = minimax(board,depth-1,not is_maximiser, alpha, beta)
         scores.append(score)
-        print(str(depth) + ' ' + str(alpha))
+        undo_move(board)
         if is_maximiser:
             alpha = max(alpha, score)
         else:
@@ -174,25 +174,25 @@ def minimax(board, depth, is_maximiser, alpha = MIN_EVAL, beta = MAX_EVAL):
         if beta <= alpha:
             break
 
-        undo_move(board)
     return (max if is_maximiser else min)(scores)
 
-def find_best_move(board,depth, alpha = MIN_EVAL, beta = MAX_EVAL):
+def find_best_move(board,depth, alpha = -1000000, beta = 1000000):
     board.analysed_moves = 1
+    log_board(board,log_enabled, depth)
     moves = []
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
+        log_board(board,log_enabled, depth)
+        
         score = minimax(board,depth-1,False, alpha, beta)
-
         moves.append((score,col))
-
+        undo_move(board)
         alpha = max(alpha, score)
-
         if beta <= alpha:
             break
 
-        undo_move(board)
+        
     log_msg("Possible move evals: " + str(moves),log_enabled)
     return max(moves,key=itemgetter(0))
 
@@ -206,10 +206,8 @@ def connect_four_ab(contents, turn, max_depth):
     board = convert_state_to_player_pos(turn[0],contents)
     log_msg("STARTING BOARD",log_enabled)
     log_msg("We are playing as " + turn,log_enabled)
-    log_board(board,log_enabled)
     best_move = find_best_move(board,max_depth)
 
-    #print_board(board)
     log_msg("------\nSummary\n------", log_enabled)
     log_msg("Running minimax at depth: " + str(max_depth),log_enabled)
     log_msg("Best Move: " + str((best_move[1])), log_enabled)
@@ -221,9 +219,11 @@ def log_msg(msg,enabled):
     if enabled:
         print(msg)
 
-def log_board(board, enabled):
+def log_board(board, enabled, depth):
     if enabled:
-        print("Move " + str(board.moves_made))
+        print("-----")
+        print("Move " + str(board.moves_made) + " at depth " + str(depth))
+        print("Moves Analysed " + str(board.analysed_moves))
         print('+===============+')
         for i in range(board.height,-1,-1):
             print('| ', end="")
@@ -240,4 +240,4 @@ def log_board(board, enabled):
         print('+===============+')
 
 if __name__ == '__main__':
-    connect_four_ab(".......,.......,.......,.......,.......,.......", "red", 2)
+    connect_four_ab("r..y..r,r..y..r,......r,.......,.......,.......", "red", 3)
