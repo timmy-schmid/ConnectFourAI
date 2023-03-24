@@ -18,4 +18,9 @@ ideas from
   * We should never play under an opponent winning positions.
   * If the opponent has more than two directly playable winning positions, then we cannot do anything and we will lose.
 * Order moves at each level based off a score function
+* Refactor recursive calls to be iterative so we don't blow up the stack when we go deep (not sure if this is necessary)
+
+Note that everything has to be tested on the Grok server as that's our speed limitation.
+
+Another thing to note is that I discovered Grok servers are only using Python 3.6 so we are limited by inbuilt libraries that that version has to offer
 
