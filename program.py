@@ -2,7 +2,7 @@
 
 from operator import itemgetter
 
-log_enabled = False
+log_enabled = True
 
 VERTICAL = 1
 RIGHT_DIAG = 6
@@ -11,6 +11,9 @@ HORIZONTAL = 7
 
 RED = 0
 YEL = 1
+
+MAX_EVAL = 10000
+MIN_EVAL = -10000
 class Board:
     '''
     Bitboard Representation of state.
@@ -118,7 +121,7 @@ def undo_move(board):
 def eval(board, depth, is_maximiser):
     #check terminal state - if previous player  has made 4 in a row
     if num_in_row(4,board.player_states[not board.cur_player]):
-        return -10000 if is_maximiser else 10000
+        return MIN_EVAL if is_maximiser else MAX_EVAL
 
     elif depth == 0:
         return score(board.player_states[board.our_player]) - \
@@ -149,28 +152,46 @@ def num_in_row(count, state):
 
     return total
 
-def minimax(board, depth, is_maximiser):
+def minimax(board, depth, is_maximiser, alpha = MIN_EVAL, beta = MAX_EVAL):
     score = eval(board, depth, is_maximiser)
 
     if score is not None:
         return score
     
     scores = []
-
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
-        scores.append(minimax(board,depth-1,is_maximiser=not is_maximiser))
+
+        score = minimax(board,depth-1,not is_maximiser, alpha, beta)
+        scores.append(score)
+        print(str(depth) + ' ' + str(alpha))
+        if is_maximiser:
+            alpha = max(alpha, score)
+        else:
+            beta = min(beta, score)
+
+        if beta <= alpha:
+            break
+
         undo_move(board)
     return (max if is_maximiser else min)(scores)
 
-def find_best_move(board,depth):
+def find_best_move(board,depth, alpha = MIN_EVAL, beta = MAX_EVAL):
     board.analysed_moves = 1
     moves = []
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
-        moves.append((minimax(board,depth-1, is_maximiser = False),col))
+        score = minimax(board,depth-1,False, alpha, beta)
+
+        moves.append((score,col))
+
+        alpha = max(alpha, score)
+
+        if beta <= alpha:
+            break
+
         undo_move(board)
     log_msg("Possible move evals: " + str(moves),log_enabled)
     return max(moves,key=itemgetter(0))
@@ -180,7 +201,7 @@ def available_cols(board):
     return [j for j in range(0,board.width)
             if (board.col_height[j] % 7 != 6)]
 
-def connect_four_mm(contents, turn, max_depth):
+def connect_four_ab(contents, turn, max_depth):
 
     board = convert_state_to_player_pos(turn[0],contents)
     log_msg("STARTING BOARD",log_enabled)
@@ -219,7 +240,4 @@ def log_board(board, enabled):
         print('+===============+')
 
 if __name__ == '__main__':
-    # Example function call below, you can add your own to test the connect_four_mm function
-    #connect_four_mm(".ryyrry,.rryry.,..y.r..,..y....,.......,.......", "red", 4)
-    #connect_four_mm("..yyrrr,..ryryr,....y..,.......,.......,.......", "red", 1)
-    connect_four_mm("..y.r..,..y.r..,..y.r..,.......,.......,.......", "red", 1)
+    connect_four_ab(".......,.......,.......,.......,.......,.......", "red", 2)
