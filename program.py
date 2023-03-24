@@ -2,7 +2,7 @@
 
 from operator import itemgetter
 
-log_enabled = False
+log_enabled = True
 
 VERTICAL = 1
 RIGHT_DIAG = 6
@@ -160,6 +160,7 @@ def minimax(board, depth, is_maximiser):
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
+        log_board(board,log_enabled)
         scores.append(minimax(board,depth-1,is_maximiser=not is_maximiser))
         undo_move(board)
     return (max if is_maximiser else min)(scores)
@@ -170,6 +171,7 @@ def find_best_move(board,depth):
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
+        log_board(board,log_enabled)
         moves.append((minimax(board,depth-1, is_maximiser = False),col))
         undo_move(board)
     log_msg("Possible move evals: " + str(moves),log_enabled)
@@ -203,6 +205,7 @@ def log_msg(msg,enabled):
 def log_board(board, enabled):
     if enabled:
         print("Move " + str(board.moves_made))
+        print("Moves Analysed " + str(board.analysed_moves))
         print('+===============+')
         for i in range(board.height,-1,-1):
             print('| ', end="")
@@ -222,4 +225,4 @@ if __name__ == '__main__':
     # Example function call below, you can add your own to test the connect_four_mm function
     #connect_four_mm(".ryyrry,.rryry.,..y.r..,..y....,.......,.......", "red", 4)
     #connect_four_mm("..yyrrr,..ryryr,....y..,.......,.......,.......", "red", 1)
-    connect_four_mm("..y.r..,..y.r..,..y.r..,.......,.......,.......", "red", 1)
+    connect_four_mm(".......,.......,.......,.......,.......,.......", "red", 2)
