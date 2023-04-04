@@ -68,7 +68,7 @@ def get_num_set_bits(n: int):   # " Brian Kernighan's Algorithm "
 @lru_cache(maxsize=2000000)
 def get_col_height(board, col):
     col_values = (board >> col*7) & 63  # 63 = b0111111 i.e. values in the column.
-    return get_num_set_bits(col_values) + col*7
+    return get_num_set_bits(col_values) + col*7 # Offset by the column
 
 
 @lru_cache(maxsize=2000000)
@@ -80,6 +80,10 @@ def make_move(board, col):
 @lru_cache(maxsize=2000000)
 def get_available_cols(board):
     return [i for i in range(0,7) if (board >> i*7) & 63 != 63]
+
+
+def column_is_playable(board, c):
+    return (board >> c*7) & 32 != 32    # 32 = 0100000, i.e. returns whether or not the top bit is set.
 
 
 @lru_cache(maxsize=2000000)
@@ -109,107 +113,137 @@ def is_winning_state(state):
 def player_can_win(primary_board, secondary_board):
     cols = get_available_cols(primary_board | secondary_board)
     for c in cols:
-        if is_winning_state(make_move(primary_board | secondary_board, c) ^ secondary_board):
-            return True
-    return False
+        if column_is_playable(primary_board | secondary_board, c):
+            if is_winning_state(make_move(primary_board | secondary_board, c) ^ secondary_board):
+                return c
+    return 0
+
+
+def score(state):
+    three_in_row = num_in_row(3, state)  # - 2*four_in_row
+    two_in_row = num_in_row(2, state) - 2 * three_in_row  # 3*four_in_row
+    return bin(state).count("1") + 10 * two_in_row + 100 * three_in_row  # + 1000*four_in_row
+
+
+def num_in_row(count, state):
+    total = 0
+    directions = {VERTICAL, RIGHT_DIAG, LEFT_DIAG, HORIZONTAL}
+
+    # Some bitshifting magic to found how many in a row we have.
+    # See: https://towardsdatascience.com/creating-the-perfect-connect-four-ai-bot-c165115557b0
+
+    for dir in directions:
+        m = state
+        for j in range(1, count):
+            m = m & (m >> dir)
+        total += bin(m).count("1")
+
+    return total
 
 
 
-def render_board(own_board, enemy_board):
-    print('+===============+')
+def render_board(o_board, e_board, depth):
+    print("\t"*depth + '+===============+')
     for i in range(6, -1, -1):
-        print('| ', end="")
+        print('\t'*depth + '| ', end="")
         for j in range(0, 7):
             cur = (i + j * 7)
-            if own_board & (1 << cur):
+            if o_board & (1 << cur):
                 print('O ', end='')
-            elif enemy_board & (1 << cur):
+            elif e_board & (1 << cur):
                 print('E ', end='')
             else:
                 print('. ', end='')
 
         print('|')
-    print('+===============+')
+    print('\t'*depth + '+===============+')
 
 
+# !!! possible optimisation: calculating depth instead of passing it. get_set_bits(o_board | e_board)
 @lru_cache(maxsize=2000000)
-def evaluate_score(depth, o_board, e_board, is_maximiser, return_best_move, alpha=-1000000, beta=1000000):
+def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000000, beta=1000000):
 
+    highest_depth_achieved = depth + 1
     if is_maximiser:
         if is_winning_state(o_board):
-            return 1
+            return 10000, highest_depth_achieved
     elif is_winning_state(e_board):
-        return -1
+        return -10000, highest_depth_achieved
 
     if (get_num_set_bits(o_board | e_board)) >= 42:
-        return 0
+        return 0, highest_depth_achieved
 
-    cols = get_available_cols(o_board | e_board)
     best_minmax_move = 0
+    c = 6
+    depth_achieved = highest_depth_achieved
+    while c > 0:
+        if column_is_playable(o_board | e_board, c):
+            if is_maximiser:
+                new_board = make_move(o_board | e_board, c) ^ e_board
 
-    for i, c in enumerate(cols):
-        if is_maximiser:
-            # if it would make a loss...
-            new_board = make_move(o_board | e_board, c) ^ e_board
-            render_board(new_board, e_board)
-            if player_can_win(e_board, o_board):    # reversed because it's the next turn
-                max_score = -1
+                if player_can_win(e_board, new_board):    # reversed because it's the next turn
+                    max_score = -10000  # The score for this is -10000 since the enemy can win next turn.
+                else:
+                    max_score, depth_achieved = evaluate_score(depth + 1, max_depth, new_board, e_board, False, alpha, beta)
+                if max_score > alpha:
+                    alpha, best_minmax_move, highest_depth_achieved = max_score, c, depth_achieved
+
+                elif alpha == -10000 and max_score == alpha and depth_achieved > highest_depth_achieved:    # Choose a move with a higher depth
+                    alpha, best_minmax_move, highest_depth_achieved = max_score, c, depth_achieved
+
             else:
-                max_score = evaluate_score(depth + 1, new_board, e_board, False, False, alpha, beta)
-            if max_score > alpha:
-                alpha, best_minmax_move = max_score, c
-            print(max_score)
-        else:
-            new_board = make_move(o_board | e_board, c) ^ o_board
-            #print("min")
-            #render_board(o_board, new_board)
-            if player_can_win(o_board, e_board):    # reversed because it's the next turn
-                min_score = 1
-            else:
-                min_score = evaluate_score(depth + 1, o_board, new_board, True, False, alpha, beta)
-            if min_score < beta:
-                beta, best_minmax_move = min_score, c
+                new_board = make_move(o_board | e_board, c) ^ o_board
+                if player_can_win(o_board, new_board):    # reversed because it's the next turn
+                    min_score = 10000
+                else:
+                    min_score, depth_achieved = evaluate_score(depth + 1, max_depth, o_board, new_board, True, alpha, beta)
+                if min_score < beta:
+                    # We don't need to know the best move for the minimiser.
+                    beta, highest_depth_achieved = min_score, depth_achieved
 
-        if beta <= alpha:
-            break
+            if beta <= alpha:
+                break
+        c -= 1 # Most algorithms will attempt from the left. We attempt from the right.
 
-    if return_best_move:
+    if depth == 0:
         if is_maximiser:
-            return alpha, best_minmax_move
-        return beta, best_minmax_move
+            return alpha, highest_depth_achieved, best_minmax_move
+        return beta, highest_depth_achieved, best_minmax_move
     else:
         if is_maximiser:
-            return alpha
-        return beta
+            return alpha, highest_depth_achieved
+        return beta, highest_depth_achieved
 
 
+def play_game(o_board, e_board):
+    max_depth = 4
+    render_board(o_board, e_board, 0)
+    if get_num_set_bits(o_board | e_board) >= 42 or \
+            is_winning_state(o_board) or \
+            is_winning_state(e_board):  # State is either already full or a player has already won.
+        return
+
+    c = player_can_win(o_board, e_board)
+    if c:
+        return c    # Play to win
+    c = player_can_win(e_board, o_board)
+    if c:
+        return c    # Play to not lose
 
 
-
-
-def run_simulation(own_board, enemy_board, current_turn):
-    score, best_move = evaluate_score(0, own_board, enemy_board, current_turn, True)
-    print(score, best_move)
+    # otherwise, find the most optimal option.
+    score, highest_depth_achieved, best_move = evaluate_score(0, max_depth, own_board, enemy_board, True)
+    print(f"Score: {score}, best move: {best_move}, highest depth: {highest_depth_achieved}")
+    return best_move
 
 
 if __name__ == '__main__':
-    import timeit
-    analysed_moves = 0
     #own_board, enemy_board = convert_state_to_player_pos('r', "r..y..r,r..y..r,......r,.......,.......,.......")
-    own_board, enemy_board = convert_state_to_player_pos('r', "rrryyyr,yyyrrry,rrryyyr,yyy..rr,.......,.......")
-    render_board(own_board, enemy_board)
-    if get_num_set_bits(own_board|enemy_board) < 42 and \
-            not is_winning_state(own_board) and \
-            not is_winning_state(enemy_board): # i.e. board isn't full
-        x = run_simulation(own_board, enemy_board, True)
-        #own_board = make_move(own_board | enemy_board, 3) ^ enemy_board
-        #render_board(own_board, enemy_board)
-
-    else:
-        print("State is either already full or a player has already won.")
-    #render_board(own_board, enemy_board)
-
-
+    #own_board, enemy_board = convert_state_to_player_pos('r', "rrryyyr,yyyrrry,rrryyyr,ryy.r..,yyrry..,rrr....")
+    own_board, enemy_board = convert_state_to_player_pos('y', "rrryyyr,yyyrrry,rr.....,.......,.......,.......")
+    # theoretically red can win this.
+    print(play_game(own_board, enemy_board))
+    #render_board(own_board, enemy_board, 0)
 
 
 
@@ -217,3 +251,6 @@ if __name__ == '__main__':
 
 # See:
 # http://www.informatik.uni-trier.de/~fernau/DSL0607/Masterthesis-Viergewinnt.pdf
+
+# Note that if we're given a board with a floating piece, it'll crash. But that should be ok
+# and it would be a waste of computation to test for it since we're guaranteed it won't happen
