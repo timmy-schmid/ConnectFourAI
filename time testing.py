@@ -190,14 +190,58 @@ print(get_num_set_bits(3))
 print(get_num_set_bits(5))
 print(get_num_set_bits(92525)) # Should be 10
 
+def v21():
+    return timeit.timeit("""\
+if False:
+    if True:
+        pass
+""", number=1000000)
+
+def v22():
+    return timeit.timeit("""\
+if False and True:
+    pass
+""", number=1000000)
+
+def do_something(a, b, c):
+    pass
+
+def do_something2(a, b):
+    c = get_num_set_bits(a | b)
+
+def v23():
+    return timeit.timeit("""\
+do_something(1, 9, 14)
+""", globals=globals(), number=1000000)
+
+def v24():
+    return timeit.timeit("""\
+do_something2(1, 9)
+""", globals=globals(), number=1000000)
+
+def v25():
+    return timeit.timeit("""\
+if True:
+    pass
+""", globals=globals(), number=1000000)
+
+def v26():
+    return timeit.timeit("""\
+if 1 >= 0:
+    pass
+""", globals=globals(), number=1000000)
+
+
+
 
 
 NUM_TIMES = 20
-RANGE_Vs = [18, 25]
+RANGE_Vs = [25, 26]
 result_Vs = []
 
 for j in range(RANGE_Vs[0], RANGE_Vs[1]+1):
     result_Vs.append([None]*NUM_TIMES)
+
 
 
 for i in tqdm(range(0, NUM_TIMES)):

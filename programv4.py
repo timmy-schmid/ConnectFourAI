@@ -117,7 +117,39 @@ def is_winning_state(state):
 
 
 def player_can_win(primary_board, secondary_board):
+    combined_board = primary_board | secondary_board
+    if column_is_playable(combined_board, 0):
+        if is_winning_state(make_move(combined_board, 0) ^ secondary_board):
+            return True
 
+    if column_is_playable(combined_board, 1):
+        if is_winning_state(make_move(combined_board, 1) ^ secondary_board):
+            return True
+
+    if column_is_playable(combined_board, 2):
+        if is_winning_state(make_move(combined_board, 2) ^ secondary_board):
+            return True
+
+    if column_is_playable(combined_board, 3):
+        if is_winning_state(make_move(combined_board, 3) ^ secondary_board):
+            return True
+
+    if column_is_playable(combined_board, 4):
+        if is_winning_state(make_move(combined_board, 4) ^ secondary_board):
+            return True
+
+    if column_is_playable(combined_board, 5):
+        if is_winning_state(make_move(combined_board, 5) ^ secondary_board):
+            return True
+
+    if column_is_playable(combined_board, 6):
+        if is_winning_state(make_move(combined_board, 6) ^ secondary_board):
+            return True
+
+    return False
+
+
+def player_can_win_get_pos(primary_board, secondary_board):
     combined_board = primary_board | secondary_board
     if column_is_playable(combined_board, 0):
         if is_winning_state(make_move(combined_board, 0) ^ secondary_board):
@@ -151,9 +183,9 @@ def player_can_win(primary_board, secondary_board):
 
 
 def heuristic_score(state):
-    three_in_row = num_in_row(3, state)  # - 2*four_in_row
-    two_in_row = num_in_row(2, state) - 2 * three_in_row  # 3*four_in_row
-    return get_num_set_bits(state) + 10 * two_in_row + 100 * three_in_row  # + 1000*four_in_row
+    three_in_row = num_in_row(3, state)
+    two_in_row = num_in_row(2, state)
+    return get_num_set_bits(state) + 10 * two_in_row + 80 * three_in_row
 
 
 def num_in_row(count, state):
@@ -195,14 +227,6 @@ def render_board(o_board, e_board, depth):
 def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000000, beta=1000000):
     #print(" "*depth + "X")
     highest_depth_achieved = depth + 1
-    if is_maximiser:
-        if is_winning_state(o_board):
-            return 10000, highest_depth_achieved
-    elif is_winning_state(e_board):
-        return -10000, highest_depth_achieved
-
-    if (get_num_set_bits(o_board | e_board)) >= 42:
-        return 0, highest_depth_achieved
 
     best_minmax_move = 0
     c = 6
@@ -212,16 +236,17 @@ def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000
             if is_maximiser:
                 new_board = make_move(o_board | e_board, c) ^ e_board
 
-                if player_can_win(e_board, new_board) >= 0:    # reversed because it's the next turn
+                if player_can_win(e_board, new_board):    # reversed because it's the next turn
                     max_score = -10000  # The score for this is -10000 since the enemy can win next turn.
                 elif depth > max_depth:
+                    print("e")
                     max_score = heuristic_score(o_board) - heuristic_score(e_board)
                 else:
                     max_score, depth_achieved = evaluate_score(depth + 1, max_depth, new_board, e_board, False, alpha, beta)
 
                 if max_score > alpha:
                     alpha, best_minmax_move, highest_depth_achieved = max_score, c, depth_achieved
-                elif 10000 > alpha:
+                elif alpha < 10000:
                     if alpha == max_score:
                         if depth_achieved > highest_depth_achieved:
                             # If we're going to get the same score, stall for as long as possible.
@@ -229,7 +254,7 @@ def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000
 
             else:
                 new_board = make_move(o_board | e_board, c) ^ o_board
-                if player_can_win(o_board, new_board) >= 0:    # reversed because it's the next turn
+                if player_can_win(o_board, new_board):    # reversed because it's the next turn
                     min_score = 10000
                 elif depth > max_depth:
                     min_score = heuristic_score(e_board) - heuristic_score(o_board)
@@ -238,8 +263,8 @@ def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000
                 if min_score < beta:
                     beta, highest_depth_achieved = min_score, depth_achieved
 
-            if beta <= alpha:
-                break
+        if beta <= alpha:
+            break
         c -= 1 # Most algorithms will attempt from the left. We attempt from the right.
 
     if depth == 0:
@@ -253,16 +278,15 @@ def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000
 
 
 def play_game(o_board, e_board):
-    render_board(o_board, e_board, 0)
     if get_num_set_bits(o_board | e_board) >= 42 or \
             is_winning_state(o_board) or \
             is_winning_state(e_board):  # State is either already full or a player has already won.
         return
 
-    c = player_can_win(o_board, e_board)
+    c = player_can_win_get_pos(o_board, e_board)
     if c >= 0:
         return c    # Play to win
-    c = player_can_win(e_board, o_board)
+    c = player_can_win_get_pos(e_board, o_board)
     if c >= 0:
         return c    # Play to not lose
 
@@ -285,7 +309,7 @@ def play_game(o_board, e_board):
 
 
     # otherwise, find the most optimal option.
-    max_depth = 13
+    max_depth = 10
     score, highest_depth_achieved, best_move = evaluate_score(0, max_depth, own_board, enemy_board, True)
     print(f"Score: {score}, best move: {best_move}, highest depth: {highest_depth_achieved}")
     return best_move
@@ -294,8 +318,11 @@ def play_game(o_board, e_board):
 if __name__ == '__main__':
     #own_board, enemy_board = convert_state_to_player_pos('r', "r..y..r,r..y..r,......r,.......,.......,.......")
     #own_board, enemy_board = convert_state_to_player_pos('r', "rrryyyr,yyyrrry,rrryyyr,ryy.r..,yyrry..,rrr....")
-    own_board, enemy_board = convert_state_to_player_pos('y', "...ryr.,...yr..,...ry..,...y...,...r...,...y...")
+    #own_board, enemy_board = convert_state_to_player_pos('y', "...ryr.,...yr..,...ry..,...y...,...r...,...y...")
+    own_board, enemy_board = convert_state_to_player_pos('r', "...ryr.,...yr..,...ry..,...y...,...r...,...y...")
+
     # theoretically red can win this.
+    render_board(own_board, enemy_board, 0)
     best_move = play_game(own_board, enemy_board)
     print(best_move)
     #render_board(own_board, enemy_board, 0)
