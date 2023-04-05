@@ -10,7 +10,8 @@ RIGHT_DIAG = 6
 LEFT_DIAG = 8
 HORIZONTAL = 7
 
-start_time = time.time()
+
+
 
 
 
@@ -32,6 +33,18 @@ Board is represented as a bitstring with 0'th position being LSB
 |0  7 14 21 28 35 42|
 +===================+
 '''
+
+def init_pool(given_int, max_depth, o_board, e_board):
+    global start_time
+    start_time = given_int
+    global pool_max_depth
+    pool_max_depth = max_depth
+    global pool_o_board
+    pool_o_board = o_board
+    global pool_e_board
+    pool_e_board = e_board
+
+
 
 
 def convert_state_to_player_pos(turn, contents):
@@ -226,7 +239,11 @@ def render_board(o_board, e_board, depth):
 
 
 # Performs score calculation for the first 6 columns.
-def get_first_alpha_of_col(c, max_depth, o_board, e_board):
+def get_first_alpha_of_col(c):
+
+    max_depth = pool_max_depth
+    o_board = pool_o_board
+    e_board = pool_e_board
 
     if column_is_playable(o_board | e_board, c):
         # Guaranteed it's maximiser
@@ -239,17 +256,12 @@ def get_first_alpha_of_col(c, max_depth, o_board, e_board):
     return -100000  # Can't play
 
 
-def evaluate_score_first_maximiser(max_depth, o_board, e_board):
-    best_move = 0
-    highest_score = -10000
-    c = 0
-    while c < 7:
-        score = get_first_alpha_of_col(c, max_depth, o_board, e_board)
-        if score > highest_score:
-            highest_score = score
-            best_move = c
-        c += 1
-    return best_move
+def evaluate_score_first_maximiser(max_depth, o_board, e_board, start_time):
+    columns = [3, 2, 1, 4, 5, 6, 0] # Centred
+    p = Pool(initializer=init_pool, initargs=(start_time, max_depth, o_board, e_board))
+    xd = p.map(get_first_alpha_of_col, columns)
+    optimal_move = columns[max(range(len(xd)), key=xd.__getitem__)]
+    return optimal_move
 
 
 @lru_cache(maxsize=2000000)
@@ -310,7 +322,10 @@ def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000
     return beta, highest_depth_achieved
 
 
-def play_game(o_board, e_board):
+def connect_four(contents, turn):
+
+    o_board, e_board = convert_state_to_player_pos(turn, contents)
+
     if get_num_set_bits(o_board | e_board) >= 42 or \
             is_winning_state(o_board) or \
             is_winning_state(e_board):  # State is either already full or a player has already won.
@@ -330,36 +345,42 @@ def play_game(o_board, e_board):
         return c    # Play to not lose
 
 
-    optimal_move = 0
+    best_move = 0
     use_IDS = True
 
     if use_IDS:
         max_depth = 4
         while time.time() - start_t < 0.9:  # !!! Needs to be less than the main time_cutout.
-            optimal_move = evaluate_score_first_maximiser(max_depth, own_board, enemy_board)
+            best_move = evaluate_score_first_maximiser(max_depth, own_board, enemy_board, start_time=start_t)
             evaluate_score.cache_clear()
             max_depth += 1
+        #print(max_depth)
     else:
-        optimal_move = evaluate_score_first_maximiser(6, own_board, enemy_board)
+        best_move = evaluate_score_first_maximiser(6, own_board, enemy_board, start_time=start_t)
 
-    return optimal_move
+    return best_move
+
+
 
 
 if __name__ == '__main__':
-    if len(sys.argv) <= 1:
-        start_t = time.time()
-        own_board, enemy_board = convert_state_to_player_pos('y', "rrryyyr,..yr...,..yr...,.......,.......,.......")
-        render_board(own_board, enemy_board, 0)
-        move = play_game(own_board, enemy_board)
-        print(f"Best move: {move}. Time taken (s): {time.time() - start_t}")
-    else:
-        board = sys.argv[1]
-        player = sys.argv[2]
-        own_board, enemy_board = convert_state_to_player_pos(player, board)
-        print(board, player)
-        render_board(own_board, enemy_board, 0)
-        move = play_game(own_board, enemy_board)
-        print(f"Best move: {move}. Time taken (s): {time.time() - start_t}")
+    print(connect_four(".ryyrry,.rryry.,.......,.......,.......,.......", "red"))
+    # if len(sys.argv) <= 1:
+    #     start_t = time.time()
+    #     own_board, enemy_board = convert_state_to_player_pos('y', "rrryyyr,..yr...,..yr...,.......,.......,.......")
+    #     render_board(own_board, enemy_board, 0)
+    #     best_move = play_game(own_board, enemy_board)
+    #     print(f"Best move: {best_move}. Time taken (s): {time.time() - start_t}")
+    # else:
+    #     board = sys.argv[1]
+    #     player = sys.argv[2]
+    #     own_board, enemy_board = convert_state_to_player_pos(player, board)
+    #     print(board, player)
+    #     render_board(own_board, enemy_board, 0)
+    #     best_move = play_game(own_board, enemy_board)
+    #     print(f"Best move: {best_move}. Time taken (s): {time.time() - start_t}")
+
+
 
         #render_board(own_board, enemy_board, 0)
 
