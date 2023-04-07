@@ -228,8 +228,8 @@ def num_in_row(count, state):
 
 @lru_cache(maxsize=200000)
 def evaluate_score_maximise(depth,  o_board, e_board, alpha, beta):
-    if time.time() - start_time > 0.95:
-        #print('exiting')
+    if time.time() - start_time > 0.9:
+        print('exiting')
         return heuristic_score(o_board) - heuristic_score(e_board)
 
     c = 6
@@ -242,6 +242,9 @@ def evaluate_score_maximise(depth,  o_board, e_board, alpha, beta):
             elif depth < 0:
                 max_score = heuristic_score(o_board) - heuristic_score(e_board)
             else:
+                if should_rotate_board(new_board):
+                    new_board = rotate_board(new_board)
+                    e_board = rotate_board(e_board)
                 max_score = evaluate_score_minimise(depth - 1, new_board, e_board, alpha, beta)
 
             if max_score > alpha:
@@ -254,8 +257,8 @@ def evaluate_score_maximise(depth,  o_board, e_board, alpha, beta):
 
 @lru_cache(maxsize=200000)
 def evaluate_score_minimise(depth, o_board, e_board, alpha, beta):
-    if time.time() - start_time > 0.95:
-        #print('exiting')
+    if time.time() - start_time > 0.9:
+        print('exiting')
         return heuristic_score(o_board) - heuristic_score(e_board)
 
     c = 6
@@ -289,7 +292,7 @@ def get_first_alpha_of_col(c, depth=None, o_board=None, e_board=None):
         new_board = make_move(o_board | e_board, c) ^ e_board
         if player_can_win(e_board, new_board):  # reversed because it's the next turn
             max_score = -10000  # The score for this is -10000 since the enemy can win next turn.
-        elif time.time() - start_time > 0.95:
+        elif time.time() - start_time > 0.9:
             #print('EXITING')
             return heuristic_score(o_board) - heuristic_score(e_board)
         else:
@@ -318,12 +321,11 @@ def evaluate_score_first_maximiser(depth, o_board, e_board):
         return evaluate_score_first_maximiser_single(depth, o_board, e_board)
     else:   # Around this point, the overhead of multiprocessing is justifiable
         try:
-            t1 = time.time()
-            if t1 - start_time > 0.95:
+            if time.time() - start_time > 0.9:
                 return evaluate_score_first_maximiser_single(depth, o_board, e_board)
             columns = [3, 2, 1, 4, 5, 6, 0]  # Centred
             p = Pool(processes=min(cpu_count(), 7), initializer=init_pool, initargs=(start_time, depth, o_board, e_board))
-            if time.time() - start_time > 0.95:
+            if time.time() - start_time > 0.9:
                 return evaluate_score_first_maximiser_single(depth, o_board, e_board)
 
             scores = p.map(get_first_alpha_of_col, columns)
@@ -351,12 +353,24 @@ def manual_strategy(o_board, e_board):
         elif (e_board >> 2 * 7) & 63 or (e_board >> 3 * 7) & 63 or (e_board >> 4 * 7) & 63:
             return 3
 
+@lru_cache(20000)
+def should_rotate_board(board):
+    return get_num_set_bits(board >> 28) < get_num_set_bits(board & 1040319)
+
+
+@lru_cache(20000)
+def rotate_board(board):
+    # 'flips' all the bits across the x axis, centred on the centre column.
+    board_new = ((board >> 21 & 63) << 21) + \
+                    ((board >> 14 & 63) << 28) + ((board >> 28 & 63) << 14) + \
+                    ((board >> 7 & 63) << 35) + ((board >> 35 & 63) << 7) + \
+                    ((board >> 0 & 63) << 42) + ((board >> 42 & 63) << 0)
+    return board
+
 def connect_four(contents, turn):
     global start_time
     start_time = time.time()
     o_board, e_board = convert_state_to_player_pos(turn, contents)
-
-    rotate_board(o_board, e_board)
 
     if get_num_set_bits(o_board | e_board) >= 42 or \
             is_winning_state(o_board) or \
@@ -379,45 +393,18 @@ def connect_four(contents, turn):
     best_move = 0
     max_depth = 5
     while time.time() - start_time < 0.85:   # We'd like to guarantee that it explores the next level entirely.
-        #print(f"Starting depth {max_depth}")
+        print(f"Starting depth {max_depth}")
         best_move = evaluate_score_first_maximiser(max_depth, o_board, e_board)
         evaluate_score_maximise.cache_clear()   # These results will be from heuristics.
         evaluate_score_minimise.cache_clear()   # These results will be from heuristics.
         max_depth += 1
     return best_move
 
-def rotate_board(o_board, e_board):
-    # 49 bits, bitshifted to the right by one.
-
-    o_board_new = (o_board >> 21 & 63) << 21    # Just the centre for now
-    e_board_new = (e_board >> 21 & 63) << 21
-
-    render_board(o_board_new, 0)
-
-    o_board_colzk = ((o_board >> 21 & 63) << 21) + \
-                    ((o_board >> 14 & 63) << 28) + ((o_board >> 28 & 63) << 14) + \
-                    ((o_board >> 7 & 63) << 35) + ((o_board >> 35 & 63) << 7) + \
-                    ((o_board >> 0 & 63) << 42) + ((o_board >> 42 & 63) << 0)
-
-    e_board_colzk = (e_board >> 21 & 63) << 21 + \
-                    ((e_board >> 14 & 63) << 28) + ((e_board >> 28 & 63) << 14) + \
-                    ((e_board >> 7 & 63) << 35) + ((e_board >> 35 & 63) << 7) + \
-                    ((e_board >> 0 & 63) << 42) + ((e_board >> 42 & 63) << 0)
-
-
-    render_board(o_board_colzk, e_board_colzk)
-
-    render_board(o_board, e_board)
-    o_board = (o_board >> 21) << 21
-    e_board = (e_board >> 21) << 21
-    #o_board = (o_board >> 25) | (o_board << (49-25))
-    render_board(o_board, e_board)
-
 
 if __name__ == '__main__':
     t = time.time()
     if len(sys.argv) <= 1:
-        board = ".rryyyr,.yryrrr,..y...y,..r...y,......y,......."
+        board = ".rryyyr,.yryrrr,..y...y,..r...y,.......,......."
         player = "red"
     else:
         board = sys.argv[1]
