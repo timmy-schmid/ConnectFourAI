@@ -10,10 +10,10 @@ RIGHT_DIAG = 6
 LEFT_DIAG = 8
 HORIZONTAL = 7
 
-def render_board(o_board, e_board, depth):
-    print("\t" * depth + '+===============+')
+def render_board(o_board, e_board):
+    print('+===============+')
     for i in range(6, -1, -1):
-        print('\t' * depth + '| ', end="")
+        print('| ', end="")
         for j in range(0, 7):
             cur = (i + j * 7)
             if o_board & (1 << cur):
@@ -24,7 +24,7 @@ def render_board(o_board, e_board, depth):
                 print('. ', end='')
 
         print('|')
-    print('\t' * depth + '+===============+')
+    print('+===============+')
 
 
 
@@ -333,12 +333,30 @@ def evaluate_score_first_maximiser(depth, o_board, e_board):
             return evaluate_score_first_maximiser_single(depth, o_board, e_board)
 
 
+def manual_strategy(o_board, e_board):
 
+    if get_num_set_bits(o_board | e_board) == 0:
+        return 3
+
+    if get_num_set_bits(o_board | e_board) == 1:
+        # first move
+        if (e_board >> 0 * 7) & 63:
+            return 1
+        elif (e_board >> 6 * 7) & 63:
+            return 5
+        elif (e_board >> 1 * 7) & 63:
+            return 2
+        elif (e_board >> 5 * 7) & 63:
+            return 4
+        elif (e_board >> 2 * 7) & 63 or (e_board >> 3 * 7) & 63 or (e_board >> 4 * 7) & 63:
+            return 3
 
 def connect_four(contents, turn):
     global start_time
     start_time = time.time()
     o_board, e_board = convert_state_to_player_pos(turn, contents)
+
+    rotate_board(o_board, e_board)
 
     if get_num_set_bits(o_board | e_board) >= 42 or \
             is_winning_state(o_board) or \
@@ -346,11 +364,11 @@ def connect_four(contents, turn):
         return
 
     # Manual strategy
-    if get_num_set_bits(o_board | e_board) == 0:
-        return 3
+    strategy = manual_strategy(o_board, e_board)
+    if strategy is not None:
+        return strategy
 
-    # if game_has_been_played_by_us: return play_with_manual_strat()
-
+    # Automatic strategy
     c = player_can_win_get_pos(o_board, e_board)
     if c >= 0:
         return c  # Play to win
@@ -368,11 +386,38 @@ def connect_four(contents, turn):
         max_depth += 1
     return best_move
 
+def rotate_board(o_board, e_board):
+    # 49 bits, bitshifted to the right by one.
+
+    o_board_new = (o_board >> 21 & 63) << 21    # Just the centre for now
+    e_board_new = (e_board >> 21 & 63) << 21
+
+    render_board(o_board_new, 0)
+
+    o_board_colzk = ((o_board >> 21 & 63) << 21) + \
+                    ((o_board >> 14 & 63) << 28) + ((o_board >> 28 & 63) << 14) + \
+                    ((o_board >> 7 & 63) << 35) + ((o_board >> 35 & 63) << 7) + \
+                    ((o_board >> 0 & 63) << 42) + ((o_board >> 42 & 63) << 0)
+
+    e_board_colzk = (e_board >> 21 & 63) << 21 + \
+                    ((e_board >> 14 & 63) << 28) + ((e_board >> 28 & 63) << 14) + \
+                    ((e_board >> 7 & 63) << 35) + ((e_board >> 35 & 63) << 7) + \
+                    ((e_board >> 0 & 63) << 42) + ((e_board >> 42 & 63) << 0)
+
+
+    render_board(o_board_colzk, e_board_colzk)
+
+    render_board(o_board, e_board)
+    o_board = (o_board >> 21) << 21
+    e_board = (e_board >> 21) << 21
+    #o_board = (o_board >> 25) | (o_board << (49-25))
+    render_board(o_board, e_board)
+
 
 if __name__ == '__main__':
     t = time.time()
     if len(sys.argv) <= 1:
-        board = ".rryy..,.......,.......,.......,.......,......."
+        board = ".rryyyr,.yryrrr,..y...y,..r...y,......y,......."
         player = "red"
     else:
         board = sys.argv[1]
