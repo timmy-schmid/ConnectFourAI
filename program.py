@@ -95,7 +95,6 @@ def make_move(board, col):
     board.col_height[col] += 1
 
     board.player_states[board.cur_player] ^= move
-    #board.board_state ^= board.player_states[board.cur_turn]
 
     board.moves.append(col)
     board.moves_made+=1
@@ -112,7 +111,6 @@ def undo_move(board):
     board.player_states[not board.cur_player] ^= move
 
     board.cur_player = not board.cur_player
-    #board.board_state ^= board.player_states[board.cur_turn] #do we need this?
 
 
 def eval(board, depth, is_maximiser):
@@ -129,10 +127,9 @@ def score(state):
     #Note: we subtract double counts when counting how many 2/3 in a rows there are.
     #      eg. in every 4 in a row there is 2 x three in a rows.
  
-    #four_in_row = num_in_row(4,state)
-    three_in_row = num_in_row(3,state) #- 2*four_in_row 
-    two_in_row = num_in_row(2,state) - 2*three_in_row #3*four_in_row 
-    return bin(state).count("1") + 10*two_in_row + 100*three_in_row #+ 1000*four_in_row
+    three_in_row = num_in_row(3,state)
+    two_in_row = num_in_row(2,state) - 2*three_in_row
+    return bin(state).count("1") + 10*two_in_row + 100*three_in_row
 
 def num_in_row(count, state):
     total = 0
@@ -160,7 +157,6 @@ def minimax(board, depth, is_maximiser):
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
-        log_board(board,log_enabled)
         scores.append(minimax(board,depth-1,is_maximiser=not is_maximiser))
         undo_move(board)
     return (max if is_maximiser else min)(scores)
@@ -171,10 +167,8 @@ def find_best_move(board,depth):
     for col in available_cols(board):
         make_move(board,col)
         board.analysed_moves += 1
-        log_board(board,log_enabled)
         moves.append((minimax(board,depth-1, is_maximiser = False),col))
         undo_move(board)
-    log_msg("Possible move evals: " + str(moves),log_enabled)
     return max(moves,key=itemgetter(0))
 
 #returns the list of columns that are possible to play in
@@ -185,17 +179,7 @@ def available_cols(board):
 def connect_four_mm(contents, turn, max_depth):
 
     board = convert_state_to_player_pos(turn[0],contents)
-    log_msg("STARTING BOARD",log_enabled)
-    log_msg("We are playing as " + turn,log_enabled)
-    log_board(board,log_enabled)
     best_move = find_best_move(board,max_depth)
-
-    #print_board(board)
-    log_msg("------\nSummary\n------", log_enabled)
-    log_msg("Running minimax at depth: " + str(max_depth),log_enabled)
-    log_msg("Best Move: " + str((best_move[1])), log_enabled)
-    log_msg("Score: " + str((best_move[0])), log_enabled)
-    log_msg("Moves Analysed: " + str(board.analysed_moves), log_enabled)
     return str(best_move[1]) + '\n' + str(board.analysed_moves)
 
 def log_msg(msg,enabled):
@@ -222,7 +206,4 @@ def log_board(board, enabled):
         print('+===============+')
 
 if __name__ == '__main__':
-    # Example function call below, you can add your own to test the connect_four_mm function
-    #connect_four_mm(".ryyrry,.rryry.,..y.r..,..y....,.......,.......", "red", 4)
-    #connect_four_mm("..yyrrr,..ryryr,....y..,.......,.......,.......", "red", 1)
     connect_four_mm(".......,.......,.......,.......,.......,.......", "red", 2)
