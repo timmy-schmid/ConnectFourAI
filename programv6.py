@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 import time
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import sys
 
 VERTICAL = 1
@@ -10,6 +10,21 @@ RIGHT_DIAG = 6
 LEFT_DIAG = 8
 HORIZONTAL = 7
 
+def render_board(o_board, e_board, depth):
+    print("\t" * depth + '+===============+')
+    for i in range(6, -1, -1):
+        print('\t' * depth + '| ', end="")
+        for j in range(0, 7):
+            cur = (i + j * 7)
+            if o_board & (1 << cur):
+                print('O ', end='')
+            elif e_board & (1 << cur):
+                print('E ', end='')
+            else:
+                print('. ', end='')
+
+        print('|')
+    print('\t' * depth + '+===============+')
 
 
 
@@ -32,17 +47,16 @@ Board is represented as a bitstring with 0'th position being LSB
 +===================+
 '''
 
+
 def init_pool(given_int, max_depth, o_board, e_board):
     global start_time
     start_time = given_int
-    global pool_max_depth
-    pool_max_depth = max_depth
+    global pool_depth
+    pool_depth = max_depth
     global pool_o_board
     pool_o_board = o_board
     global pool_e_board
     pool_e_board = e_board
-
-
 
 
 def convert_state_to_player_pos(turn, contents):
@@ -70,16 +84,16 @@ def convert_state_to_player_pos(turn, contents):
     yel_state = int(yel_state, 2)
 
     if turn == 'r':
-        return red_state, yel_state # own_board, enemy_board
+        return red_state, yel_state  # own_board, enemy_board
     else:
-        return yel_state, red_state # own_board, enemy_board
+        return yel_state, red_state  # own_board, enemy_board
 
 
 @lru_cache(maxsize=2000000)
-def get_num_set_bits(n: int):   # " Brian Kernighan's Algorithm "
+def get_num_set_bits(n: int):  # " Brian Kernighan's Algorithm "
     c = 0
     while n > 0:
-        n &= (n-1)
+        n &= (n - 1)
         c += 1
     return c
 
@@ -87,8 +101,8 @@ def get_num_set_bits(n: int):   # " Brian Kernighan's Algorithm "
 # !!! Could be optimised.
 @lru_cache(maxsize=2000000)
 def get_col_height(board, col):
-    col_values = (board >> col*7) & 63  # 63 = b0111111 i.e. values in the column.
-    return get_num_set_bits(col_values) + col*7 # Offset by the column
+    col_values = (board >> col * 7) & 63  # 63 = b0111111 i.e. values in the column.
+    return get_num_set_bits(col_values) + col * 7  # Offset by the column
 
 
 @lru_cache(maxsize=2000000)
@@ -97,8 +111,9 @@ def make_move(board, col):
     return board
 
 
+@lru_cache(maxsize=2000000)
 def column_is_playable(board, c):
-    return (board >> c*7) & 32 != 32    # 32 = 0100000, i.e. returns whether or not the top bit is set.
+    return (board >> c * 7) & 32 != 32  # 32 = 0100000, i.e. returns whether or not the top bit is set.
 
 
 @lru_cache(maxsize=2000000)
@@ -200,10 +215,8 @@ def heuristic_score(state):
 def num_in_row(count, state):
     total = 0
     directions = {VERTICAL, RIGHT_DIAG, LEFT_DIAG, HORIZONTAL}
-
     # Some bitshifting magic to found how many in a row we have.
     # See: https://towardsdatascience.com/creating-the-perfect-connect-four-ai-bot-c165115557b0
-
     for dir in directions:
         m = state
         for j in range(1, count):
@@ -213,28 +226,61 @@ def num_in_row(count, state):
     return total
 
 
+@lru_cache(maxsize=200000)
+def evaluate_score_maximise(depth,  o_board, e_board, alpha, beta):
+    if time.time() - start_time > 0.97:
+        print('exiting')
+        return heuristic_score(o_board) - heuristic_score(e_board)
 
-def render_board(o_board, e_board, depth):
-    print("\t"*depth + '+===============+')
-    for i in range(6, -1, -1):
-        print('\t'*depth + '| ', end="")
-        for j in range(0, 7):
-            cur = (i + j * 7)
-            if o_board & (1 << cur):
-                print('O ', end='')
-            elif e_board & (1 << cur):
-                print('E ', end='')
+    c = 6
+    while c >= 0:
+        if column_is_playable(o_board | e_board, c):
+            new_board = make_move(o_board | e_board, c) ^ e_board
+
+            if player_can_win(e_board, new_board):  # reversed because it's the next turn
+                max_score = -10000  # The score for this is -10000 since the enemy can win next turn.
+            elif depth < 0:
+                max_score = heuristic_score(o_board) - heuristic_score(e_board)
             else:
-                print('. ', end='')
+                max_score = evaluate_score_minimise(depth - 1, new_board, e_board, alpha, beta)
 
-        print('|')
-    print('\t'*depth + '+===============+')
+            if max_score > alpha:
+                alpha = max_score
+        if beta <= alpha:
+            break
+        c -= 1  # Most algorithms will attempt from the left. We attempt from the right.
+    return alpha
 
 
-# Performs score calculation for the first 6 columns.
-def get_first_alpha_of_col(c, max_depth=None, o_board=None, e_board=None):
-    if max_depth is None:   # i.e. multiprocessing
-        max_depth = pool_max_depth
+@lru_cache(maxsize=200000)
+def evaluate_score_minimise(depth, o_board, e_board, alpha, beta):
+    if time.time() - start_time > 0.97:
+        print('exiting')
+        return heuristic_score(o_board) - heuristic_score(e_board)
+
+    c = 6
+    while c >= 0:
+        if column_is_playable(o_board | e_board, c):
+            new_board = make_move(o_board | e_board, c) ^ o_board
+            if player_can_win(o_board, new_board):  # reversed because it's the next turn
+                min_score = 10000
+            elif depth <= 0:
+                min_score = heuristic_score(o_board) - heuristic_score(e_board)
+            else:
+                min_score = evaluate_score_maximise(depth - 1, o_board, new_board, alpha, beta)
+
+            if min_score < beta:
+                beta = min_score
+        if beta <= alpha:
+            break
+        c -= 1  # Most algorithms will attempt from the left. We attempt from the right.
+    return beta
+
+
+# Performs score calculation for a given column
+def get_first_alpha_of_col(c, depth=None, o_board=None, e_board=None):
+    if depth is None:  # i.e. multiprocessing
+        depth = pool_depth
         o_board = pool_o_board
         e_board = pool_e_board
 
@@ -243,87 +289,47 @@ def get_first_alpha_of_col(c, max_depth=None, o_board=None, e_board=None):
         new_board = make_move(o_board | e_board, c) ^ e_board
         if player_can_win(e_board, new_board):  # reversed because it's the next turn
             max_score = -10000  # The score for this is -10000 since the enemy can win next turn.
+        elif time.time() - start_time > 0.97:
+            print('EXITING')
+            return heuristic_score(o_board) - heuristic_score(e_board)
         else:
-            max_score, _ = evaluate_score(1, max_depth, new_board, e_board, False, -1000000, 1000000)
+            max_score = evaluate_score_maximise(depth, new_board, e_board, -1000000, 1000000)
         return max_score
-    return -100000  # Can't play
+
+    return -1000000  # Can't play
 
 
-def evaluate_score_first_maximiser(max_depth, o_board, e_board):
-    try:
-        columns = [3, 2, 1, 4, 5, 6, 0] # Centred
-        p = Pool(initializer=init_pool, initargs=(start_time, max_depth, o_board, e_board))
-        xd = p.map(get_first_alpha_of_col_multiprocessing(), columns)
-        optimal_move = columns[max(range(len(xd)), key=xd.__getitem__)]
-
-    except:
-        optimal_move = 0
-        highest_score = -10000
-        c = 0
-        while c < 7:
-            score = get_first_alpha_of_col(c, max_depth, o_board, e_board)
-            if score > highest_score:
-                highest_score = score
-                optimal_move = c
-            c += 1
-
+def evaluate_score_first_maximiser_single(depth, o_board, e_board):
+    highest_score = -1000000
+    c = 0
+    while c < 7:
+        score = get_first_alpha_of_col(c, depth, o_board, e_board)
+        if score > highest_score:
+            highest_score = score
+            optimal_move = c
+        c += 1
     return optimal_move
 
+# Performs score calculation for the first 6 columns.
+def evaluate_score_first_maximiser(depth, o_board, e_board):
+    optimal_move = 0
+    if depth < 9:
+        return evaluate_score_first_maximiser_single(depth, o_board, e_board)
+    else:   # Around this point, the overhead of multiprocessing is justifiable
+        try:
+            t1 = time.time()
+            columns = [3, 2, 1, 4, 5, 6, 0]  # Centred
+            p = Pool(processes=min(cpu_count(), 7), initializer=init_pool, initargs=(start_time, depth, o_board, e_board))
+            if time.time() - start_time > 0.97:
+                return evaluate_score_first_maximiser_single(depth, o_board, e_board)
 
-@lru_cache(maxsize=2000000)
-def evaluate_score(depth, max_depth, o_board, e_board, is_maximiser, alpha=-1000000, beta=1000000):
-    highest_depth_achieved = depth + 1
+            scores = p.map(get_first_alpha_of_col, columns)
+            return columns[max(range(len(scores)), key=scores.__getitem__)]  # Get index
 
-    #print(depth*" " + "X")
+        except (RuntimeError, BlockingIOError):
+            return evaluate_score_first_maximiser_single(depth, o_board, e_board)
 
-    c = 6
-    depth_achieved = highest_depth_achieved
 
-    while c >= 0:
-        if column_is_playable(o_board | e_board, c):
-            too_much_time_passed = time.time() - start_time > 0.98  # !!!
-
-            if is_maximiser:
-                new_board = make_move(o_board | e_board, c) ^ e_board
-
-                if player_can_win(e_board, new_board):    # reversed because it's the next turn
-                    max_score = -10000  # The score for this is -10000 since the enemy can win next turn.
-                elif too_much_time_passed:
-                    max_score = heuristic_score(o_board) - heuristic_score(e_board)
-                elif depth > max_depth:
-                    max_score = heuristic_score(o_board) - heuristic_score(e_board)
-                else:
-                    max_score, depth_achieved = evaluate_score(depth + 1, max_depth, new_board, e_board, False, alpha, beta)
-
-                if max_score > alpha:
-                    alpha, best_minmax_move, highest_depth_achieved = max_score, c, depth_achieved
-                elif alpha < 10000:
-                    if alpha == max_score:
-                        if depth_achieved > highest_depth_achieved:
-                            # If we're going to get the same score, stall for as long as possible.
-                            alpha, best_minmax_move, highest_depth_achieved = max_score, c, depth_achieved
-
-            else:
-                new_board = make_move(o_board | e_board, c) ^ o_board
-                if player_can_win(o_board, new_board):    # reversed because it's the next turn
-                    min_score = 10000
-                elif too_much_time_passed:
-                    min_score = heuristic_score(o_board) - heuristic_score(e_board)
-                elif depth > max_depth:
-                    min_score = heuristic_score(o_board) - heuristic_score(e_board)
-                else:
-                    min_score, depth_achieved = evaluate_score(depth + 1, max_depth, o_board, new_board, True, alpha, beta)
-
-                if min_score < beta:
-                    beta, highest_depth_achieved = min_score, depth_achieved
-
-        if beta <= alpha:
-            break
-        c -= 1 # Most algorithms will attempt from the left. We attempt from the right.
-
-    if is_maximiser:
-        return alpha, highest_depth_achieved
-    return beta, highest_depth_achieved
 
 
 def connect_four(contents, turn):
@@ -344,18 +350,21 @@ def connect_four(contents, turn):
 
     c = player_can_win_get_pos(o_board, e_board)
     if c >= 0:
-        return c    # Play to win
+        return c  # Play to win
     c = player_can_win_get_pos(e_board, o_board)
     if c >= 0:
-        return c    # Play to not lose
-
+        return c  # Play to not lose
 
     best_move = 0
-    max_depth = 4
-    while time.time() - start_time < 0.95:  # !!! Needs to be less than the main time cutout of 0.95
+    max_depth = 6
+    while time.time() - start_time < 0.95:
+        print(f"Starting depth {max_depth}")
         best_move = evaluate_score_first_maximiser(max_depth, o_board, e_board)
-        evaluate_score.cache_clear()
+        evaluate_score_maximise.cache_clear()
+        evaluate_score_minimise.cache_clear()
+        print(f"Finished depth {max_depth}")
         max_depth += 1
+
 
     return best_move
 
@@ -370,10 +379,7 @@ if __name__ == '__main__':
         player = sys.argv[2]
 
     print(connect_four(board, player))
-    #print(time.time() - t)
-
-
-
+    print(time.time() - t)
 
 # See:
 # http://www.informatik.uni-trier.de/~fernau/DSL0607/Masterthesis-Viergewinnt.pdf
